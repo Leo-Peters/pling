@@ -1,18 +1,26 @@
 <#
 .SYNOPSIS
-    pling - Make the taskbar flash to signal a task is done.
+    pling - Make the taskbar flash and play a sound to signal a task is done.
 
 .DESCRIPTION
-    Flashes the Windows taskbar and shows a toast notification.
-    Works natively on Windows (PowerShell 5.1+).
+    Flashes the Windows taskbar, shows a toast notification, and plays a
+    sound. Works natively on Windows (PowerShell 5.1+).
 
 .EXAMPLE
     .\pling.ps1
-    # Flash taskbar with defaults
+    # Flash taskbar + play default sound
 
 .EXAMPLE
     .\pling.ps1 -Message "Build done"
     # Flash with a custom message
+
+.EXAMPLE
+    .\pling.ps1 -Sound C:\sounds\done.wav
+    # One-off override of the sound file
+
+.EXAMPLE
+    .\pling.ps1 -SetSound C:\sounds\done.wav
+    # Persist a default sound (saved to %LOCALAPPDATA%\pling\config)
 
 .EXAMPLE
     cargo build; .\pling.ps1
@@ -21,12 +29,34 @@
 
 param(
     [string]$Message = "Task complete",
+    [string]$Sound = "",
+    [string]$SetSound = "",
     [switch]$Help
 )
 
 if ($Help) {
     Get-Help $MyInvocation.MyCommand.Path -Detailed
     exit 0
+}
+
+$configFile = Join-Path $env:LOCALAPPDATA "pling\config"
+
+if ($SetSound) {
+    New-Item -ItemType Directory -Path (Split-Path $configFile) -Force | Out-Null
+    Set-Content -Path $configFile -Value $SetSound -Encoding UTF8
+    Write-Host "Default sound saved: $SetSound"
+    exit 0
+}
+
+# ─── Resolve sound: -Sound > saved config > bundled mp3 > none ──────────────
+
+if (-not $Sound -and (Test-Path $configFile)) {
+    $Sound = (Get-Content $configFile -Raw).Trim()
+}
+if (-not $Sound) {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $bundled = Join-Path $scriptDir "out-of-nowhere-message-tone.mp3"
+    if (Test-Path $bundled) { $Sound = $bundled }
 }
 
 # ─── Flash the taskbar ──────────────────────────────────────────────────────
@@ -114,5 +144,19 @@ catch {
     # Toast not available — taskbar flash is enough
 }
 
-# 3. Audible beep as extra nudge
-[Console]::Beep(800, 200)
+# 3. Play sound (or beep if none configured / playback fails)
+if ($Sound -and (Test-Path $Sound)) {
+    try {
+        Add-Type -AssemblyName PresentationCore
+        $player = New-Object System.Windows.Media.MediaPlayer
+        $player.Open([Uri](Resolve-Path $Sound))
+        $player.Play()
+        Start-Sleep -Milliseconds 3000
+    }
+    catch {
+        [Console]::Beep(800, 200)
+    }
+}
+else {
+    [Console]::Beep(800, 200)
+}

@@ -73,6 +73,8 @@ PowerShell equivalent:
 ```powershell
 .\pling.ps1
 .\pling.ps1 -Message "Build done"
+.\pling.ps1 -Sound C:\sounds\done.wav
+.\pling.ps1 -SetSound C:\sounds\done.wav    # persisted to %LOCALAPPDATA%\pling\config
 cargo build; .\pling.ps1
 ```
 
@@ -163,15 +165,21 @@ pling -- agent-cli                 # wrap (preserves exit code)
 
 Sound resolution order (first match wins):
 
-1. `-s FILE` flag on the current invocation
-2. Path saved via `--set-sound`, stored in `~/.config/pling/config`
+1. `-s FILE` (bash) / `-Sound FILE` (PowerShell) on the current invocation
+2. Path saved via `--set-sound` / `-SetSound`
+   - bash: `~/.config/pling/config`
+   - PowerShell: `%LOCALAPPDATA%\pling\config`
 3. `out-of-nowhere-message-tone.mp3` next to the real script (symlinks resolved), shipped with the repo
-4. No sound — flash + notification only
+4. No sound — bash falls back to terminal bell; PowerShell falls back to `Console::Beep`
 
 Override the default:
 
 ```bash
 pling --set-sound ~/sounds/done.wav
+```
+
+```powershell
+.\pling.ps1 -SetSound C:\sounds\done.wav
 ```
 
 Sample sound from [Notification Sounds](https://notificationsounds.com).
