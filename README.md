@@ -101,15 +101,22 @@ The PowerShell version installs only the Claude Code Stop hook (into `%USERPROFI
 
 ## Sound configuration
 
-Set a persistent default sound file so every invocation plays audio automatically:
+Sound resolution order (first match wins):
+
+1. `-s FILE` flag on the current invocation
+2. Path saved via `--set-sound`, stored in `~/.config/pling/config`
+3. The bundled `out-of-nowhere-message-tone.mp3` if it sits next to the `pling` script
+4. No sound — flash + notification only
+
+Set a persistent default:
 
 ```bash
 pling --set-sound ~/sounds/done.wav
 ```
 
-This saves the path to `~/.config/pling/config`. You can override it per-invocation with `-s`.
+> If you copy only the `pling` script to `/usr/local/bin/`, the bundled mp3 won't follow it. To keep audio working out-of-the-box, copy the mp3 alongside (or run `pling --set-sound /path/to/it`).
 
-A sample sound (`out-of-nowhere-message-tone.mp3`) is included in this repo. Sounds from [Notification Sounds](https://notificationsounds.com).
+Sample sound from [Notification Sounds](https://notificationsounds.com).
 
 ## How it works
 

@@ -97,6 +97,12 @@ if [[ -z "$SOUND" && -f "$PLING_CONFIG" ]]; then
     SOUND="$(cat "$PLING_CONFIG")"
 fi
 
+# Fall back to the bundled sample sound if it sits next to the script
+if [[ -z "$SOUND" ]]; then
+    bundled="$(cd "$(dirname "$0")" && pwd)/out-of-nowhere-message-tone.mp3"
+    [[ -f "$bundled" ]] && SOUND="$bundled"
+fi
+
 # ─── Resolve own path (used by all hook installers) ─────────────────────────
 
 self_path() {
