@@ -17,39 +17,32 @@ Make your taskbar flash and play a sound when a long-running task finishes — o
 <details open>
 <summary><b>Linux / macOS / WSL2</b></summary>
 
-```bash
-git clone https://github.com/Leo-Peters/pling.git
-sudo cp pling/pling /usr/local/bin/
-sudo chmod +x /usr/local/bin/pling
+Clone to a stable location, then symlink onto your PATH:
 
-# Use the bundled sample sound (or skip and run --set-sound with your own later)
-mkdir -p ~/.config/pling
-cp pling/out-of-nowhere-message-tone.mp3 ~/.config/pling/
-pling --set-sound ~/.config/pling/out-of-nowhere-message-tone.mp3
+```bash
+git clone https://github.com/Leo-Peters/pling.git ~/.local/share/pling
+sudo ln -sf ~/.local/share/pling/pling /usr/local/bin/pling
 ```
+
+That's it — the bundled sample sound is auto-discovered next to the script. Update later with `git -C ~/.local/share/pling pull`. Uninstall: `sudo rm /usr/local/bin/pling && rm -rf ~/.local/share/pling`.
 
 </details>
 
 <details>
 <summary><b>Windows (native PowerShell)</b></summary>
 
-```powershell
-git clone https://github.com/Leo-Peters/pling.git
-New-Item -ItemType Directory -Path "C:\Tools" -Force | Out-Null
-Copy-Item .\pling\pling.ps1 -Destination "C:\Tools\"
-```
-
-Then add `C:\Tools` to your PATH so you can call `pling.ps1` from anywhere:
+Clone to a stable location, then put that directory on your PATH:
 
 ```powershell
+git clone https://github.com/Leo-Peters/pling.git $env:LOCALAPPDATA\pling
 [Environment]::SetEnvironmentVariable(
     "Path",
-    [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\Tools",
+    [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:LOCALAPPDATA\pling",
     "User"
 )
 ```
 
-Open a new PowerShell window for the PATH change to take effect.
+Open a new PowerShell window so the PATH update takes effect, then call `pling.ps1` from anywhere. Update later with `git -C $env:LOCALAPPDATA\pling pull`.
 
 </details>
 
@@ -172,9 +165,10 @@ Sound resolution order (first match wins):
 
 1. `-s FILE` flag on the current invocation
 2. Path saved via `--set-sound`, stored in `~/.config/pling/config`
-3. No sound — flash + notification only
+3. `out-of-nowhere-message-tone.mp3` next to the real script (symlinks resolved), shipped with the repo
+4. No sound — flash + notification only
 
-Set a persistent default:
+Override the default:
 
 ```bash
 pling --set-sound ~/sounds/done.wav

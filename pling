@@ -75,6 +75,16 @@ if [[ -z "$SOUND" && -f "$PLING_CONFIG" ]]; then
     SOUND="$(cat "$PLING_CONFIG")"
 fi
 
+# Fall back to bundled sample sound that ships next to the real script
+# (resolves through symlinks so /usr/local/bin/pling -> ~/.local/share/pling/pling works).
+if [[ -z "$SOUND" ]]; then
+    real_self="$0"
+    [[ -L "$real_self" ]] && real_self="$(readlink -f "$0" 2>/dev/null || readlink "$0")"
+    script_dir="$(cd "$(dirname "$real_self")" && pwd)"
+    bundled="$script_dir/out-of-nowhere-message-tone.mp3"
+    [[ -f "$bundled" ]] && SOUND="$bundled"
+fi
+
 # ─── Run wrapped command if provided ────────────────────────────────────────
 
 CMD_EXIT=0
