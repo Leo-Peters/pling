@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+#
+# pling - Make the taskbar flash to signal a task is done.
+#
+# Works on:
+#   - Windows Terminal (WSL2) — taskbar flashes orange
+#   - GNOME / KDE / most X11 desktops — urgency hint + notify-send
+#   - macOS Terminal / iTerm2 — dock bounce
+#
+# Usage:
+#   pling                      # flash taskbar
+#   long-task; pling           # flash when task finishes
+#   pling -m "Build done"      # flash with a message (shown in notification)
+#   pling -- make build        # run command, flash when it finishes
+#
+# Install:
+#   cp pling /usr/local/bin/   (or anywhere on your PATH)
+#
+# Claude Code integration (flash when Claude finishes):
+#   pling --install-hook       # writes the Stop hook into ~/.claude/settings.json
+
+set -euo pipefail
+
+MESSAGE=""
+SOUND=""
+INSTALL_HOOK=false
+
+# Config file for persistent sound setting
+PLING_CONFIG="${PLING_CONFIG:-$HOME/.config/pling/config}"
+
+usage() {
+    cat <<'EOF'
+Usage: pling [options] [-- command [args...]]
+
+Make the taskbar flash to signal a task is done.
+
+Options:
+  -m MSG            Notification message (default: "Task complete")
+  -s FILE           Play a sound file (.wav, .mp3, .ogg)
+  --set-sound FILE  Save a default sound so you never need -s again
+  --install-hook    Install as a Claude Code Stop hook
+  -h, --help        Show this help
+
+Examples:
+  make build; pling                   # flash after build
+  pling -- make build                 # same thing
+  pling -m "Tests passed"            # flash with custom message
+  pling -s ~/sounds/done.wav         # flash + play sound
+  pling --set-sound ~/sounds/done.wav # save as default sound
+  pling --install-hook                # set up Claude Code integration
+EOF
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -m)             MESSAGE="$2"; shift 2 ;;
+        -s)             SOUND="$2"; shift 2 ;;
+        --set-sound)
+            mkdir -p "$(dirname "$PLING_CONFIG")"
+            echo "$2" > "$PLING_CONFIG"
+            echo "Default sound saved: $2"
+            exit 0
+            ;;
+        --install-hook) INSTALL_HOOK=true; shift ;;
+        -h|--help)      usage ;;
+        --)             shift; break ;;
+        -*)             echo "pling: unknown option $1" >&2; exit 1 ;;
+        *)              break ;;
+    esac
+done
+
+: "${MESSAGE:=Task complete}"
+
+# Load default sound from config if -s was not given
+if [[ -z "$SOUND" && -f "$PLING_CONFIG" ]]; then
+    SOUND="$(cat "$PLING_CONFIG")"
+fi
+
+# ─── Install Claude Code hook ───────────────────────────────────────────────
+
+install_hook() {
+    local settings_file="$HOME/.claude/settings.json"
+    local self
+    self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+
+    mkdir -p "$HOME/.claude"
+
+    # Build the hook entry
+    local hook_command="$self -m 'Claude finished'"
+
+    if [[ -f "$settings_file" ]]; then
+        if ! command -v python3 &>/dev/null; then
+            echo "pling: python3 is required to safely edit settings.json" >&2
+            exit 1
+        fi
+        python3 - "$settings_file" "$hook_command" <<'PYEOF'
+import json, sys
+
+path, cmd = sys.argv[1], sys.argv[2]
+notify_cmd = cmd.replace("'Claude finished'", "'Claude needs input'")
+
+with open(path) as f:
+    settings = json.load(f)
+
+hooks = settings.setdefault("hooks", {})
+
+# Install Stop hook
+stop_list = hooks.setdefault("Stop", [])
+already = any(h.get("command") == cmd for e in stop_list for h in e.get("hooks", []))
+if not already:
+    stop_list.append({"hooks": [{"type": "command", "command": cmd}]})
+
+# Install Notification hook
+notif_list = hooks.setdefault("Notification", [])
+already = any(h.get("command") == notify_cmd for e in notif_list for h in e.get("hooks", []))
+if not already:
+    notif_list.append({"hooks": [{"type": "command", "command": notify_cmd}]})
+
+with open(path, "w") as f:
+    json.dump(settings, f, indent=2)
+    f.write("\n")
+
+print("Hooks installed in " + path)
+PYEOF
+    else
+        cat > "$settings_file" <<JSONEOF
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$hook_command"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${hook_command/Claude finished/Claude needs input}"
+          }
+        ]
+      }
+    ]
+  }
+}
+JSONEOF
+        echo "Hooks installed in $settings_file"
+    fi
+}
+
+if $INSTALL_HOOK; then
+    install_hook
+    exit 0
+fi
+
+# ─── Run wrapped command if provided ────────────────────────────────────────
+
+CMD_EXIT=0
+if [[ $# -gt 0 ]]; then
+    "$@" || CMD_EXIT=$?
+fi
+
+# ─── Detect environment and flash the taskbar ──────────────────────────────
+
+is_wsl() {
+    [[ -f /proc/version ]] && grep -qi microsoft /proc/version
+}
+
+has_cmd() {
+    command -v "$1" &>/dev/null
+}
+
+notified=false
+
+# 1. WSL2: call FlashWindowEx via powershell — this is the actual Win32 API
+#    that makes the taskbar button pling orange until you click the window.
+if is_wsl && has_cmd powershell.exe; then
+    powershell.exe -NoProfile -Command '
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public struct FLASHWINFO {
+    public uint cbSize;
+    public IntPtr hwnd;
+    public uint dwFlags;
+    public uint uCount;
+    public uint dwTimeout;
+}
+
+public class WindowFlash {
+    [DllImport("user32.dll")]
+    public static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
+
+    public static bool Flash(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero) return false;
+        FLASHWINFO fi = new FLASHWINFO();
+        fi.cbSize = (uint)Marshal.SizeOf(typeof(FLASHWINFO));
+        fi.hwnd = hwnd;
+        fi.dwFlags = 3 | 12;
+        fi.uCount = 0;
+        fi.dwTimeout = 0;
+        return FlashWindowEx(ref fi);
+    }
+}
+"@
+        # Find all Windows Terminal windows and flash them
+        $wt = Get-Process WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($wt) {
+            # Flash the main window handle
+            if ($wt.MainWindowHandle -ne [IntPtr]::Zero) {
+                [WindowFlash]::Flash($wt.MainWindowHandle)
+            }
+        }
+    ' &>/dev/null &
+    notified=true
+fi
+
+# 2. Linux desktop: notify-send for a proper desktop notification
+if ! $notified && has_cmd notify-send; then
+    notify-send --urgency=normal "pling" "$MESSAGE" &>/dev/null &
+    notified=true
+fi
+
+# 3. Linux X11: set urgency hint on the terminal window
+if ! $notified && has_cmd xdotool; then
+    wid=$(xdotool getactivewindow 2>/dev/null || true)
+    if [[ -n "$wid" ]]; then
+        xdotool set_window --urgency 1 "$wid" 2>/dev/null || true
+        notified=true
+    fi
+fi
+
+# 4. macOS: bounce the dock icon and show a notification
+if ! $notified && [[ "$(uname)" == "Darwin" ]]; then
+    if has_cmd osascript; then
+        osascript -e "display notification \"$MESSAGE\" with title \"pling\"" &>/dev/null &
+        notified=true
+    fi
+fi
+
+# 5. Fallback: BEL character (works in some terminals)
+if ! $notified; then
+    printf "\a"
+fi
+
+# ─── Play notification sound ────────────────────────────────────────────────
+
+if [[ -n "$SOUND" ]]; then
+    # Resolve WSL path to Windows path if needed
+    if is_wsl && has_cmd powershell.exe; then
+        if [[ "$SOUND" == /* ]]; then
+            WIN_SOUND=$(wslpath -w "$SOUND" 2>/dev/null || echo "$SOUND")
+        else
+            WIN_SOUND="$SOUND"
+        fi
+        powershell.exe -NoProfile -Command "
+            Add-Type -AssemblyName PresentationCore
+            \$player = New-Object System.Windows.Media.MediaPlayer
+            \$player.Open([Uri]'$WIN_SOUND')
+            \$player.Play()
+            Start-Sleep -Milliseconds 3000
+        " &>/dev/null &
+    elif has_cmd paplay; then
+        paplay "$SOUND" &>/dev/null &
+    elif has_cmd aplay; then
+        aplay "$SOUND" &>/dev/null &
+    elif has_cmd afplay; then
+        afplay "$SOUND" &>/dev/null &
+    elif has_cmd mpv; then
+        mpv --no-video --really-quiet "$SOUND" &>/dev/null &
+    fi
+fi
+
+# Wait for background jobs to finish
+wait 2>/dev/null || true
+
+exit "$CMD_EXIT"
