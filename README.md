@@ -1,6 +1,6 @@
 # pling
 
-Make your taskbar flash and play a sound when a long-running task finishes — or when Claude needs your attention.
+Make your taskbar flash and play a sound when a long-running task finishes — or when an AI agent (Claude Code, Aider, Codex CLI, …) needs your attention.
 
 ## Platform support
 
@@ -54,33 +54,49 @@ PowerShell equivalent:
 cargo build; .\pling.ps1
 ```
 
-## Claude Code integration
+## AI agent integration
+
+`pling` itself is agent-agnostic — it just flashes and plays a sound. The bash version ships an `--install-hook` that wires it into the three CLI agents that have a finish-event hook today:
 
 ```bash
-pling --install-hook
+pling --install-hook            # Claude Code  (default)
+pling --install-hook claude     # same, explicit
+pling --install-hook aider      # Aider
+pling --install-hook codex      # Codex CLI
 ```
 
-This writes two hooks into `~/.claude/settings.json`:
+What each variant does:
 
-- **Stop** — runs `pling -m 'Claude finished'` whenever Claude finishes generating output.
-- **Notification** — runs `pling -m 'Claude needs input'` whenever Claude asks a question or needs your approval.
+| Agent | Config file | What pling writes |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | `Stop` + `Notification` hooks running `pling -m 'Claude finished'` / `pling -m 'Claude needs input'` |
+| Aider | `~/.aider.conf.yml` | `notifications_command: "pling -m 'Aider finished'"` |
+| Codex CLI | `~/.codex/config.toml` | `[features] codex_hooks = true` plus a `[[hooks.Stop]]` block running `pling -m 'Codex finished'` |
 
-The PowerShell version installs the Stop hook into `%USERPROFILE%\.claude\settings.json`:
+All variants are **idempotent** — re-running won't duplicate.
+
+For agents without a native finish hook (Cursor, Gemini CLI, Continue, …), use the generic shell-chain pattern instead:
+
+```bash
+agent-cli && pling                 # post-command chain
+pling -- agent-cli                 # wrap (preserves exit code)
+```
+
+The PowerShell version installs only the Claude Code Stop hook (into `%USERPROFILE%\.claude\settings.json`):
 
 ```powershell
 .\pling.ps1 -InstallHook
 ```
 
-The install is idempotent — running it again won't create duplicates.
-
 ## Options
 
 ```
--m MSG            Notification message (default: "Task complete")
--s FILE           Play a sound file (.wav, .mp3, .ogg)
---set-sound FILE  Save a default sound so you never need -s again
---install-hook    Install as a Claude Code hook
--h, --help        Show help
+-m MSG                  Notification message (default: "Task complete")
+-s FILE                 Play a sound file (.wav, .mp3, .ogg)
+--set-sound FILE        Save a default sound so you never need -s again
+--install-hook [AGENT]  Install pling as an AI-agent finish hook
+                        AGENT = claude (default) | aider | codex
+-h, --help              Show help
 ```
 
 ## Sound configuration

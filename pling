@@ -16,14 +16,18 @@
 # Install:
 #   cp pling /usr/local/bin/   (or anywhere on your PATH)
 #
-# Claude Code integration (flash when Claude finishes):
-#   pling --install-hook       # writes the Stop hook into ~/.claude/settings.json
+# AI agent integration (flash when an agent finishes):
+#   pling --install-hook [claude|aider|codex]
+#       claude (default)  writes Stop + Notification hooks into ~/.claude/settings.json
+#       aider             writes notifications_command into ~/.aider.conf.yml
+#       codex             writes a Stop hook into ~/.codex/config.toml
 
 set -euo pipefail
 
 MESSAGE=""
 SOUND=""
 INSTALL_HOOK=false
+HOOK_AGENT="claude"
 
 # Config file for persistent sound setting
 PLING_CONFIG="${PLING_CONFIG:-$HOME/.config/pling/config}"
@@ -35,19 +39,22 @@ Usage: pling [options] [-- command [args...]]
 Make the taskbar flash to signal a task is done.
 
 Options:
-  -m MSG            Notification message (default: "Task complete")
-  -s FILE           Play a sound file (.wav, .mp3, .ogg)
-  --set-sound FILE  Save a default sound so you never need -s again
-  --install-hook    Install as a Claude Code Stop hook
-  -h, --help        Show this help
+  -m MSG                  Notification message (default: "Task complete")
+  -s FILE                 Play a sound file (.wav, .mp3, .ogg)
+  --set-sound FILE        Save a default sound so you never need -s again
+  --install-hook [AGENT]  Install pling as an AI-agent finish hook.
+                          AGENT = claude (default), aider, or codex.
+  -h, --help              Show this help
 
 Examples:
   make build; pling                   # flash after build
   pling -- make build                 # same thing
-  pling -m "Tests passed"            # flash with custom message
-  pling -s ~/sounds/done.wav         # flash + play sound
+  pling -m "Tests passed"             # flash with custom message
+  pling -s ~/sounds/done.wav          # flash + play sound
   pling --set-sound ~/sounds/done.wav # save as default sound
-  pling --install-hook                # set up Claude Code integration
+  pling --install-hook                # Claude Code hook (default)
+  pling --install-hook aider          # Aider hook
+  pling --install-hook codex          # Codex CLI hook
 EOF
     exit 0
 }
@@ -62,7 +69,20 @@ while [[ $# -gt 0 ]]; do
             echo "Default sound saved: $2"
             exit 0
             ;;
-        --install-hook) INSTALL_HOOK=true; shift ;;
+        --install-hook)
+            INSTALL_HOOK=true
+            if [[ -n "${2:-}" && "$2" != -* && "$2" != "--" ]]; then
+                HOOK_AGENT="$2"
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --install-hook=*)
+            INSTALL_HOOK=true
+            HOOK_AGENT="${1#--install-hook=}"
+            shift
+            ;;
         -h|--help)      usage ;;
         --)             shift; break ;;
         -*)             echo "pling: unknown option $1" >&2; exit 1 ;;
@@ -77,17 +97,20 @@ if [[ -z "$SOUND" && -f "$PLING_CONFIG" ]]; then
     SOUND="$(cat "$PLING_CONFIG")"
 fi
 
+# ─── Resolve own path (used by all hook installers) ─────────────────────────
+
+self_path() {
+    cd "$(dirname "$0")" && pwd
+}
+
 # ─── Install Claude Code hook ───────────────────────────────────────────────
 
-install_hook() {
+install_hook_claude() {
     local settings_file="$HOME/.claude/settings.json"
-    local self
-    self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    local self="$(self_path)/$(basename "$0")"
+    local hook_command="$self -m 'Claude finished'"
 
     mkdir -p "$HOME/.claude"
-
-    # Build the hook entry
-    local hook_command="$self -m 'Claude finished'"
 
     if [[ -f "$settings_file" ]]; then
         if ! command -v python3 &>/dev/null; then
@@ -154,8 +177,79 @@ JSONEOF
     fi
 }
 
+# ─── Install Aider hook (notifications_command in ~/.aider.conf.yml) ────────
+
+install_hook_aider() {
+    local config="$HOME/.aider.conf.yml"
+    local self="$(self_path)/$(basename "$0")"
+    local cmd="$self -m 'Aider finished'"
+
+    if [[ -f "$config" ]] && grep -q "^notifications_command:" "$config"; then
+        echo "pling: notifications_command already set in $config — leaving as-is" >&2
+        return 0
+    fi
+
+    {
+        [[ -f "$config" ]] && cat "$config"
+        echo "notifications_command: \"$cmd\""
+    } > "$config.tmp" && mv "$config.tmp" "$config"
+
+    echo "Hook installed in $config"
+}
+
+# ─── Install Codex CLI hook (Stop hook in ~/.codex/config.toml) ─────────────
+
+install_hook_codex() {
+    local config="$HOME/.codex/config.toml"
+    local self="$(self_path)/$(basename "$0")"
+    local cmd="$self -m 'Codex finished'"
+
+    mkdir -p "$(dirname "$config")"
+
+    if [[ -f "$config" ]] && grep -Fq "command = \"$cmd\"" "$config"; then
+        echo "Hook already installed in $config"
+        return 0
+    fi
+
+    # If [features] section exists without codex_hooks, bail and let user fix it
+    if [[ -f "$config" ]] && grep -q "^\[features\]" "$config" && ! grep -q "codex_hooks = true" "$config"; then
+        echo "pling: $config already has a [features] section without codex_hooks." >&2
+        echo "       Add 'codex_hooks = true' under [features] manually, then re-run." >&2
+        return 1
+    fi
+
+    local need_features=true
+    [[ -f "$config" ]] && grep -q "codex_hooks = true" "$config" && need_features=false
+
+    {
+        [[ -f "$config" ]] && cat "$config"
+        if $need_features; then
+            echo ""
+            echo "[features]"
+            echo "codex_hooks = true"
+        fi
+        echo ""
+        echo "[[hooks.Stop]]"
+        echo ""
+        echo "[[hooks.Stop.hooks]]"
+        echo "type = \"command\""
+        echo "command = \"$cmd\""
+        echo "timeout = 30"
+    } > "$config.tmp" && mv "$config.tmp" "$config"
+
+    echo "Hook installed in $config"
+}
+
 if $INSTALL_HOOK; then
-    install_hook
+    case "$HOOK_AGENT" in
+        claude) install_hook_claude ;;
+        aider)  install_hook_aider ;;
+        codex)  install_hook_codex ;;
+        *)
+            echo "pling: unknown agent '$HOOK_AGENT' (supported: claude, aider, codex)" >&2
+            exit 1
+            ;;
+    esac
     exit 0
 fi
 
@@ -179,7 +273,7 @@ has_cmd() {
 notified=false
 
 # 1. WSL2: call FlashWindowEx via powershell — this is the actual Win32 API
-#    that makes the taskbar button pling orange until you click the window.
+#    that makes the taskbar button flash orange until you click the window.
 if is_wsl && has_cmd powershell.exe; then
     powershell.exe -NoProfile -Command '
         Add-Type -TypeDefinition @"
