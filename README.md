@@ -19,11 +19,14 @@ Make your taskbar flash and play a sound when a long-running task finishes — o
 
 ```bash
 git clone https://github.com/Leo-Peters/pling.git
-sudo cp pling/pling pling/out-of-nowhere-message-tone.mp3 /usr/local/bin/
+sudo cp pling/pling /usr/local/bin/
 sudo chmod +x /usr/local/bin/pling
-```
 
-The mp3 next to the script enables the bundled-sound fallback. Skip it if you'll set your own sound via `--set-sound`.
+# Use the bundled sample sound (or skip and run --set-sound with your own later)
+mkdir -p ~/.config/pling
+cp pling/out-of-nowhere-message-tone.mp3 ~/.config/pling/
+pling --set-sound ~/.config/pling/out-of-nowhere-message-tone.mp3
+```
 
 </details>
 
@@ -169,16 +172,13 @@ Sound resolution order (first match wins):
 
 1. `-s FILE` flag on the current invocation
 2. Path saved via `--set-sound`, stored in `~/.config/pling/config`
-3. The bundled `out-of-nowhere-message-tone.mp3` if it sits next to the `pling` script
-4. No sound — flash + notification only
+3. No sound — flash + notification only
 
 Set a persistent default:
 
 ```bash
 pling --set-sound ~/sounds/done.wav
 ```
-
-> If you copy only the `pling` script to `/usr/local/bin/`, the bundled mp3 won't follow it. To keep audio working out-of-the-box, copy the mp3 alongside (or run `pling --set-sound /path/to/it`).
 
 Sample sound from [Notification Sounds](https://notificationsounds.com).
 
