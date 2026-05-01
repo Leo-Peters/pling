@@ -14,7 +14,8 @@ Make your taskbar flash and play a sound when a long-running task finishes — o
 
 ## Install
 
-### Linux / macOS / WSL2
+<details open>
+<summary><b>Linux / macOS / WSL2</b></summary>
 
 ```bash
 git clone https://github.com/Leo-Peters/pling.git
@@ -24,7 +25,10 @@ sudo chmod +x /usr/local/bin/pling
 
 The mp3 next to the script enables the bundled-sound fallback. Skip it if you'll set your own sound via `--set-sound`.
 
-### Windows (native PowerShell)
+</details>
+
+<details>
+<summary><b>Windows (native PowerShell)</b></summary>
 
 ```powershell
 git clone https://github.com/Leo-Peters/pling.git
@@ -43,6 +47,8 @@ Then add `C:\Tools` to your PATH so you can call `pling.ps1` from anywhere:
 ```
 
 Open a new PowerShell window for the PATH change to take effect.
+
+</details>
 
 ## Usage
 
@@ -78,7 +84,8 @@ cargo build; .\pling.ps1
 
 `pling` is agent-agnostic — it just flashes and plays a sound. To get pinged when an agent finishes a turn, paste the snippet for your agent into the matching config file. Each snippet assumes `pling` is on your `PATH` at `/usr/local/bin/pling`; adjust the path if not.
 
-### Claude Code — `~/.claude/settings.json`
+<details open>
+<summary><b>Claude Code</b> — <code>~/.claude/settings.json</code></summary>
 
 ```json
 {
@@ -103,7 +110,10 @@ cargo build; .\pling.ps1
 
 If `settings.json` already exists, merge the `hooks` key in — don't overwrite the file.
 
-### Aider — `~/.aider.conf.yml`
+</details>
+
+<details>
+<summary><b>Aider</b> — <code>~/.aider.conf.yml</code></summary>
 
 ```yaml
 notifications_command: "/usr/local/bin/pling -m 'Aider finished'"
@@ -111,7 +121,10 @@ notifications_command: "/usr/local/bin/pling -m 'Aider finished'"
 
 You also need to launch aider with `--notifications` (or set `notifications: true` in the same file) so it actually fires the command.
 
-### Codex CLI — `~/.codex/config.toml`
+</details>
+
+<details>
+<summary><b>Codex CLI</b> — <code>~/.codex/config.toml</code></summary>
 
 ```toml
 [features]
@@ -127,7 +140,10 @@ timeout = 30
 
 If your config already has a `[features]` table, add `codex_hooks = true` to it instead of declaring `[features]` twice.
 
-### Anything else (Cursor, Gemini CLI, Continue, …)
+</details>
+
+<details>
+<summary><b>Anything else</b> (Cursor, Gemini CLI, Continue, …)</summary>
 
 These don't have a native finish-event hook. Fall back to the shell-chain pattern:
 
@@ -135,6 +151,8 @@ These don't have a native finish-event hook. Fall back to the shell-chain patter
 agent-cli && pling                 # post-command chain
 pling -- agent-cli                 # wrap (preserves exit code)
 ```
+
+</details>
 
 ## Options
 
