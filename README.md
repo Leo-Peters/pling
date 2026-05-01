@@ -14,14 +14,21 @@ Make your taskbar flash and play a sound when a long-running task finishes — o
 
 ## Install
 
-Copy the script somewhere on your PATH:
+### Linux / macOS / WSL2
 
 ```bash
-# Bash (WSL2 / Linux / macOS)
-cp pling /usr/local/bin/
+git clone https://github.com/Leo-Peters/pling.git
+sudo cp pling/pling pling/out-of-nowhere-message-tone.mp3 /usr/local/bin/
+sudo chmod +x /usr/local/bin/pling
+```
 
-# PowerShell (Windows)
-Copy-Item pling.ps1 -Destination "C:\Tools\"   # or anywhere on your PATH
+The mp3 next to the script enables the bundled-sound fallback. Skip it if you'll set your own sound via `--set-sound`.
+
+### Windows (native PowerShell)
+
+```powershell
+git clone https://github.com/Leo-Peters/pling.git
+Copy-Item pling\pling.ps1 -Destination "C:\Tools\"   # or anywhere on your PATH
 ```
 
 ## Usage
