@@ -63,47 +63,73 @@ cargo build; .\pling.ps1
 
 ## AI agent integration
 
-`pling` itself is agent-agnostic — it just flashes and plays a sound. The bash version ships an `--install-hook` that wires it into the three CLI agents that have a finish-event hook today:
+`pling` is agent-agnostic — it just flashes and plays a sound. To get pinged when an agent finishes a turn, paste the snippet for your agent into the matching config file. Each snippet assumes `pling` is on your `PATH` at `/usr/local/bin/pling`; adjust the path if not.
 
-```bash
-pling --install-hook            # Claude Code  (default)
-pling --install-hook claude     # same, explicit
-pling --install-hook aider      # Aider
-pling --install-hook codex      # Codex CLI
+### Claude Code — `~/.claude/settings.json`
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/pling -m 'Claude finished'" }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/pling -m 'Claude needs input'" }
+        ]
+      }
+    ]
+  }
+}
 ```
 
-What each variant does:
+If `settings.json` already exists, merge the `hooks` key in — don't overwrite the file.
 
-| Agent | Config file | What pling writes |
-|---|---|---|
-| Claude Code | `~/.claude/settings.json` | `Stop` + `Notification` hooks running `pling -m 'Claude finished'` / `pling -m 'Claude needs input'` |
-| Aider | `~/.aider.conf.yml` | `notifications_command: "pling -m 'Aider finished'"` |
-| Codex CLI | `~/.codex/config.toml` | `[features] codex_hooks = true` plus a `[[hooks.Stop]]` block running `pling -m 'Codex finished'` |
+### Aider — `~/.aider.conf.yml`
 
-All variants are **idempotent** — re-running won't duplicate.
+```yaml
+notifications_command: "/usr/local/bin/pling -m 'Aider finished'"
+```
 
-For agents without a native finish hook (Cursor, Gemini CLI, Continue, …), use the generic shell-chain pattern instead:
+You also need to launch aider with `--notifications` (or set `notifications: true` in the same file) so it actually fires the command.
+
+### Codex CLI — `~/.codex/config.toml`
+
+```toml
+[features]
+codex_hooks = true
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "/usr/local/bin/pling -m 'Codex finished'"
+timeout = 30
+```
+
+If your config already has a `[features]` table, add `codex_hooks = true` to it instead of declaring `[features]` twice.
+
+### Anything else (Cursor, Gemini CLI, Continue, …)
+
+These don't have a native finish-event hook. Fall back to the shell-chain pattern:
 
 ```bash
 agent-cli && pling                 # post-command chain
 pling -- agent-cli                 # wrap (preserves exit code)
 ```
 
-The PowerShell version installs only the Claude Code Stop hook (into `%USERPROFILE%\.claude\settings.json`):
-
-```powershell
-.\pling.ps1 -InstallHook
-```
-
 ## Options
 
 ```
--m MSG                  Notification message (default: "Task complete")
--s FILE                 Play a sound file (.wav, .mp3, .ogg)
---set-sound FILE        Save a default sound so you never need -s again
---install-hook [AGENT]  Install pling as an AI-agent finish hook
-                        AGENT = claude (default) | aider | codex
--h, --help              Show help
+-m MSG            Notification message (default: "Task complete")
+-s FILE           Play a sound file (.wav, .mp3, .ogg)
+--set-sound FILE  Save a default sound so you never need -s again
+-h, --help        Show help
 ```
 
 ## Sound configuration
@@ -136,7 +162,6 @@ Sample sound from [Notification Sounds](https://notificationsounds.com).
 
 **Bash version:**
 - Bash 4+
-- `python3` (only needed for `--install-hook` when `settings.json` already exists)
 - Optional: `notify-send`, `xdotool`, `osascript`, `paplay`/`aplay`/`afplay`/`mpv`
 
 **PowerShell version:**

@@ -16,18 +16,13 @@
 # Install:
 #   cp pling /usr/local/bin/   (or anywhere on your PATH)
 #
-# AI agent integration (flash when an agent finishes):
-#   pling --install-hook [claude|aider|codex]
-#       claude (default)  writes Stop + Notification hooks into ~/.claude/settings.json
-#       aider             writes notifications_command into ~/.aider.conf.yml
-#       codex             writes a Stop hook into ~/.codex/config.toml
+# AI agent integration: see the README for ready-to-paste snippets that wire
+# pling into Claude Code, Aider, and Codex CLI as a finish-event hook.
 
 set -euo pipefail
 
 MESSAGE=""
 SOUND=""
-INSTALL_HOOK=false
-HOOK_AGENT="claude"
 
 # Config file for persistent sound setting
 PLING_CONFIG="${PLING_CONFIG:-$HOME/.config/pling/config}"
@@ -39,12 +34,10 @@ Usage: pling [options] [-- command [args...]]
 Make the taskbar flash to signal a task is done.
 
 Options:
-  -m MSG                  Notification message (default: "Task complete")
-  -s FILE                 Play a sound file (.wav, .mp3, .ogg)
-  --set-sound FILE        Save a default sound so you never need -s again
-  --install-hook [AGENT]  Install pling as an AI-agent finish hook.
-                          AGENT = claude (default), aider, or codex.
-  -h, --help              Show this help
+  -m MSG            Notification message (default: "Task complete")
+  -s FILE           Play a sound file (.wav, .mp3, .ogg)
+  --set-sound FILE  Save a default sound so you never need -s again
+  -h, --help        Show this help
 
 Examples:
   make build; pling                   # flash after build
@@ -52,9 +45,8 @@ Examples:
   pling -m "Tests passed"             # flash with custom message
   pling -s ~/sounds/done.wav          # flash + play sound
   pling --set-sound ~/sounds/done.wav # save as default sound
-  pling --install-hook                # Claude Code hook (default)
-  pling --install-hook aider          # Aider hook
-  pling --install-hook codex          # Codex CLI hook
+
+See the README for AI agent (Claude Code / Aider / Codex CLI) hook snippets.
 EOF
     exit 0
 }
@@ -68,20 +60,6 @@ while [[ $# -gt 0 ]]; do
             echo "$2" > "$PLING_CONFIG"
             echo "Default sound saved: $2"
             exit 0
-            ;;
-        --install-hook)
-            INSTALL_HOOK=true
-            if [[ -n "${2:-}" && "$2" != -* && "$2" != "--" ]]; then
-                HOOK_AGENT="$2"
-                shift 2
-            else
-                shift
-            fi
-            ;;
-        --install-hook=*)
-            INSTALL_HOOK=true
-            HOOK_AGENT="${1#--install-hook=}"
-            shift
             ;;
         -h|--help)      usage ;;
         --)             shift; break ;;
@@ -101,162 +79,6 @@ fi
 if [[ -z "$SOUND" ]]; then
     bundled="$(cd "$(dirname "$0")" && pwd)/out-of-nowhere-message-tone.mp3"
     [[ -f "$bundled" ]] && SOUND="$bundled"
-fi
-
-# ─── Resolve own path (used by all hook installers) ─────────────────────────
-
-self_path() {
-    cd "$(dirname "$0")" && pwd
-}
-
-# ─── Install Claude Code hook ───────────────────────────────────────────────
-
-install_hook_claude() {
-    local settings_file="$HOME/.claude/settings.json"
-    local self="$(self_path)/$(basename "$0")"
-    local hook_command="$self -m 'Claude finished'"
-
-    mkdir -p "$HOME/.claude"
-
-    if [[ -f "$settings_file" ]]; then
-        if ! command -v python3 &>/dev/null; then
-            echo "pling: python3 is required to safely edit settings.json" >&2
-            exit 1
-        fi
-        python3 - "$settings_file" "$hook_command" <<'PYEOF'
-import json, sys
-
-path, cmd = sys.argv[1], sys.argv[2]
-notify_cmd = cmd.replace("'Claude finished'", "'Claude needs input'")
-
-with open(path) as f:
-    settings = json.load(f)
-
-hooks = settings.setdefault("hooks", {})
-
-# Install Stop hook
-stop_list = hooks.setdefault("Stop", [])
-already = any(h.get("command") == cmd for e in stop_list for h in e.get("hooks", []))
-if not already:
-    stop_list.append({"hooks": [{"type": "command", "command": cmd}]})
-
-# Install Notification hook
-notif_list = hooks.setdefault("Notification", [])
-already = any(h.get("command") == notify_cmd for e in notif_list for h in e.get("hooks", []))
-if not already:
-    notif_list.append({"hooks": [{"type": "command", "command": notify_cmd}]})
-
-with open(path, "w") as f:
-    json.dump(settings, f, indent=2)
-    f.write("\n")
-
-print("Hooks installed in " + path)
-PYEOF
-    else
-        cat > "$settings_file" <<JSONEOF
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$hook_command"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${hook_command/Claude finished/Claude needs input}"
-          }
-        ]
-      }
-    ]
-  }
-}
-JSONEOF
-        echo "Hooks installed in $settings_file"
-    fi
-}
-
-# ─── Install Aider hook (notifications_command in ~/.aider.conf.yml) ────────
-
-install_hook_aider() {
-    local config="$HOME/.aider.conf.yml"
-    local self="$(self_path)/$(basename "$0")"
-    local cmd="$self -m 'Aider finished'"
-
-    if [[ -f "$config" ]] && grep -q "^notifications_command:" "$config"; then
-        echo "pling: notifications_command already set in $config — leaving as-is" >&2
-        return 0
-    fi
-
-    {
-        [[ -f "$config" ]] && cat "$config"
-        echo "notifications_command: \"$cmd\""
-    } > "$config.tmp" && mv "$config.tmp" "$config"
-
-    echo "Hook installed in $config"
-}
-
-# ─── Install Codex CLI hook (Stop hook in ~/.codex/config.toml) ─────────────
-
-install_hook_codex() {
-    local config="$HOME/.codex/config.toml"
-    local self="$(self_path)/$(basename "$0")"
-    local cmd="$self -m 'Codex finished'"
-
-    mkdir -p "$(dirname "$config")"
-
-    if [[ -f "$config" ]] && grep -Fq "command = \"$cmd\"" "$config"; then
-        echo "Hook already installed in $config"
-        return 0
-    fi
-
-    # If [features] section exists without codex_hooks, bail and let user fix it
-    if [[ -f "$config" ]] && grep -q "^\[features\]" "$config" && ! grep -q "codex_hooks = true" "$config"; then
-        echo "pling: $config already has a [features] section without codex_hooks." >&2
-        echo "       Add 'codex_hooks = true' under [features] manually, then re-run." >&2
-        return 1
-    fi
-
-    local need_features=true
-    [[ -f "$config" ]] && grep -q "codex_hooks = true" "$config" && need_features=false
-
-    {
-        [[ -f "$config" ]] && cat "$config"
-        if $need_features; then
-            echo ""
-            echo "[features]"
-            echo "codex_hooks = true"
-        fi
-        echo ""
-        echo "[[hooks.Stop]]"
-        echo ""
-        echo "[[hooks.Stop.hooks]]"
-        echo "type = \"command\""
-        echo "command = \"$cmd\""
-        echo "timeout = 30"
-    } > "$config.tmp" && mv "$config.tmp" "$config"
-
-    echo "Hook installed in $config"
-}
-
-if $INSTALL_HOOK; then
-    case "$HOOK_AGENT" in
-        claude) install_hook_claude ;;
-        aider)  install_hook_aider ;;
-        codex)  install_hook_codex ;;
-        *)
-            echo "pling: unknown agent '$HOOK_AGENT' (supported: claude, aider, codex)" >&2
-            exit 1
-            ;;
-    esac
-    exit 0
 fi
 
 # ─── Run wrapped command if provided ────────────────────────────────────────

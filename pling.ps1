@@ -15,96 +15,17 @@
     # Flash with a custom message
 
 .EXAMPLE
-    .\pling.ps1 -InstallHook
-    # Install as a Claude Code Stop hook
-
-.EXAMPLE
     cargo build; .\pling.ps1
     # Flash when build finishes
 #>
 
 param(
     [string]$Message = "Task complete",
-    [switch]$InstallHook,
     [switch]$Help
 )
 
 if ($Help) {
     Get-Help $MyInvocation.MyCommand.Path -Detailed
-    exit 0
-}
-
-# ─── Install Claude Code hook ───────────────────────────────────────────────
-
-if ($InstallHook) {
-    $settingsPath = Join-Path $env:USERPROFILE ".claude\settings.json"
-    $selfPath = $MyInvocation.MyCommand.Path
-    $hookCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$selfPath`" -Message 'Claude finished'"
-
-    if (-not (Test-Path (Split-Path $settingsPath))) {
-        New-Item -ItemType Directory -Path (Split-Path $settingsPath) -Force | Out-Null
-    }
-
-    if (Test-Path $settingsPath) {
-        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-
-        # Ensure hooks.Stop structure exists
-        if (-not $settings.hooks) {
-            $settings | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{})
-        }
-        if (-not $settings.hooks.Stop) {
-            $settings.hooks | Add-Member -NotePropertyName "Stop" -NotePropertyValue @()
-        }
-
-        # Check if already installed
-        $alreadyInstalled = $false
-        foreach ($entry in $settings.hooks.Stop) {
-            foreach ($h in $entry.hooks) {
-                if ($h.command -eq $hookCommand) {
-                    $alreadyInstalled = $true
-                    break
-                }
-            }
-        }
-
-        if ($alreadyInstalled) {
-            Write-Host "Hook already installed in $settingsPath"
-            exit 0
-        }
-
-        $newEntry = [PSCustomObject]@{
-            hooks = @(
-                [PSCustomObject]@{
-                    type    = "command"
-                    command = $hookCommand
-                }
-            )
-        }
-        $settings.hooks.Stop += $newEntry
-
-        $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
-    }
-    else {
-        $json = @"
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$($hookCommand -replace '\\', '\\' -replace '"', '\"')"
-          }
-        ]
-      }
-    ]
-  }
-}
-"@
-        $json | Set-Content $settingsPath -Encoding UTF8
-    }
-
-    Write-Host "Hook installed in $settingsPath"
     exit 0
 }
 
