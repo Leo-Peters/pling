@@ -28,8 +28,21 @@ The mp3 next to the script enables the bundled-sound fallback. Skip it if you'll
 
 ```powershell
 git clone https://github.com/Leo-Peters/pling.git
-Copy-Item pling\pling.ps1 -Destination "C:\Tools\"   # or anywhere on your PATH
+New-Item -ItemType Directory -Path "C:\Tools" -Force | Out-Null
+Copy-Item .\pling\pling.ps1 -Destination "C:\Tools\"
 ```
+
+Then add `C:\Tools` to your PATH so you can call `pling.ps1` from anywhere:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    "Path",
+    [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\Tools",
+    "User"
+)
+```
+
+Open a new PowerShell window for the PATH change to take effect.
 
 ## Usage
 
