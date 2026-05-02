@@ -149,7 +149,8 @@ if ($Sound -and (Test-Path $Sound)) {
     try {
         Add-Type -AssemblyName PresentationCore
         $player = New-Object System.Windows.Media.MediaPlayer
-        $player.Open([Uri](Resolve-Path $Sound))
+        $abs = (Get-Item -LiteralPath $Sound).FullName
+        $player.Open([Uri]$abs)
         $player.Play()
         Start-Sleep -Milliseconds 3000
     }
