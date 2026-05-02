@@ -80,7 +80,7 @@ cargo build; .\pling.ps1
 
 ## AI agent integration
 
-`pling` is agent-agnostic — it just flashes and plays a sound. To get pinged when an agent finishes a turn, paste the snippet for your agent into the matching config file. Each snippet assumes `pling` is on your `PATH` at `/usr/local/bin/pling`; adjust the path if not.
+`pling` is agent-agnostic — it just flashes and plays a sound. To get pinged when an agent finishes a turn, paste the snippet for your agent into the matching config file. Each snippet assumes `pling` is on your `PATH` at `/usr/local/bin/pling`; adjust the path if not. On native Windows, replace `/usr/local/bin/pling -m '...'` with `powershell.exe -File "%LOCALAPPDATA%\pling\pling.ps1" -Message "..."`.
 
 <details open>
 <summary><b>Claude Code</b> — <code>~/.claude/settings.json</code></summary>
@@ -181,8 +181,6 @@ pling --set-sound ~/sounds/done.wav
 ```powershell
 .\pling.ps1 -SetSound C:\sounds\done.wav
 ```
-
-Sample sound from [Notification Sounds](https://notificationsounds.com).
 
 ## How it works
 
