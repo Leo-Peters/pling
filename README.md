@@ -46,6 +46,34 @@ Open a new PowerShell window so the PATH update takes effect, then call `pling.p
 
 </details>
 
+<details>
+<summary><b>Windows (cmd.exe)</b></summary>
+
+Clone to a stable location, then add it to your user PATH. Use `powershell` for the PATH edit so it touches only the User scope (the `setx PATH "%PATH%;..."` shortcut is unsafe — it merges System+User and writes the result back to User):
+
+```cmd
+git clone https://github.com/Leo-Peters/pling.git %LOCALAPPDATA%\pling
+powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:LOCALAPPDATA + '\pling', 'User')"
+```
+
+Open a new cmd window so the PATH update takes effect. cmd does not execute `.ps1` files directly, so call it via `powershell`:
+
+```cmd
+powershell -File pling.ps1
+powershell -File pling.ps1 -Message "Build done"
+```
+
+Or wrap it in a one-line `pling.cmd` shim placed next to `pling.ps1`:
+
+```cmd
+@echo off
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0pling.ps1" %*
+```
+
+Update later with `git -C %LOCALAPPDATA%\pling pull`.
+
+</details>
+
 ## Usage
 
 ```bash
