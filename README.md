@@ -56,21 +56,15 @@ git clone https://github.com/Leo-Peters/pling.git %LOCALAPPDATA%\pling
 powershell -NoProfile -Command "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:LOCALAPPDATA + '\pling', 'User')"
 ```
 
-Open a new cmd window so the PATH update takes effect. cmd does not execute `.ps1` files directly, so call it via `powershell`:
+Open a new cmd window so the PATH update takes effect, then call `pling` from anywhere:
 
 ```cmd
-powershell -File pling.ps1
-powershell -File pling.ps1 -Message "Build done"
+pling
+pling -Message "Build done"
+cargo build && pling
 ```
 
-Or wrap it in a one-line `pling.cmd` shim placed next to `pling.ps1`:
-
-```cmd
-@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0pling.ps1" %*
-```
-
-Update later with `git -C %LOCALAPPDATA%\pling pull`.
+The repo ships a `pling.cmd` shim that forwards to `pling.ps1`, so cmd doesn't need to know about `.ps1` files. Update later with `git -C %LOCALAPPDATA%\pling pull`.
 
 </details>
 
